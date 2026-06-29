@@ -19,7 +19,7 @@
     </header>
 
     <div v-if="isLoading" class="text-center mt-4">
-      <p>Sedang menganalisis halaman, mohon tunggu sebentar...</p>
+      <p>Sedang menganalisis halaman dengan Google Lighthouse, mohon tunggu sebentar...</p>
     </div>
 
     <div class="summary-bar" v-if="auditData && !isLoading">
@@ -70,15 +70,42 @@
           </div>
         </AuditCard>
 
-        <div class="perf-row">
+        <div class="perf-row" v-if="auditData.performance">
+          
           <AuditCard>
              <template #header><div class="card-title">♿ Accessibility</div></template>
-             <div class="gauge-container"><div class="gauge gauge-green">92</div></div>
+             <div class="gauge-container">
+               <div class="gauge" :style="{ background: `conic-gradient(#10b981 ${auditData.performance.accessibilityScore}%, #e5e7eb 0)` }">
+                 <span class="gauge-value">{{ auditData.performance.accessibilityScore }}</span>
+               </div>
+             </div>
+             <div class="perf-stats mt-4 text-sm">
+               <div class="flex justify-between border-b py-2">
+                 <span class="text-gray">Contrast Ratio</span>
+                 <span class="text-green font-semibold">Lulus</span>
+               </div>
+             </div>
           </AuditCard>
+
           <AuditCard>
              <template #header><div class="card-title">⚡ Performance</div></template>
-             <div class="gauge-container"><div class="gauge gauge-black">74</div></div>
+             <div class="gauge-container">
+               <div class="gauge" :style="{ background: `conic-gradient(${auditData.performance.performanceScore >= 80 ? '#10b981' : auditData.performance.performanceScore >= 50 ? '#f59e0b' : '#ef4444'} ${auditData.performance.performanceScore}%, #e5e7eb 0)` }">
+                 <span class="gauge-value">{{ auditData.performance.performanceScore }}</span>
+               </div>
+             </div>
+             <div class="perf-stats mt-4 text-sm">
+               <div class="flex justify-between border-b py-2">
+                 <span class="text-gray">LCP (Largest Content)</span>
+                 <span class="font-semibold">{{ auditData.performance.lcp }}</span>
+               </div>
+               <div class="flex justify-between py-2">
+                 <span class="text-gray">CLS (Shift)</span>
+                 <span class="font-semibold text-green">{{ auditData.performance.cls }}</span>
+               </div>
+             </div>
           </AuditCard>
+          
         </div>
       </div>
 
@@ -124,25 +151,21 @@
 import { ref, watch } from 'vue';
 import AuditCard from './components/AuditCard.vue';
 
-// State aplikasi
 const inputUrl = ref('');
 const isLoading = ref(false);
 const auditData = ref<any>(null);
 
-// Mengawasi input URL: Hapus hasil analisis otomatis jika kotak input dikosongkan
 watch(inputUrl, (newValue) => {
   if (newValue.trim() === '') {
     auditData.value = null;
   }
 });
 
-// Fungsi Reset manual via tombol
 const resetAudit = () => {
   inputUrl.value = '';
   auditData.value = null;
 };
 
-// Fungsi Utama: Mengambil data dari server.js
 const runAudit = async () => {
   if (!inputUrl.value) {
     alert("Masukkan URL terlebih dahulu!");
@@ -150,18 +173,17 @@ const runAudit = async () => {
   }
 
   isLoading.value = true;
-  auditData.value = null; // Kosongkan data lama saat loading data baru
+  auditData.value = null;
 
   try {
     const response = await fetch(`http://localhost:3000/api/audit?url=${encodeURIComponent(inputUrl.value)}`);
     if (!response.ok) throw new Error("Gagal mengambil data");
     
     const result = await response.json();
-    auditData.value = result; // Memasukkan data baru ke layar
-    console.log("Audit Sukses:", result);
+    auditData.value = result;
   } catch (error) {
     console.error("Gagal melakukan audit:", error);
-    alert("Terjadi kesalahan. Pastikan server lokal (Node.js) berjalan di port 3000.");
+    alert("Terjadi kesalahan. Pastikan server lokal (Node.js) berjalan.");
   } finally {
     isLoading.value = false;
   }
@@ -177,6 +199,13 @@ const runAudit = async () => {
 .text-green { color: #10b981; font-weight: 500; }
 .text-red { color: #ef4444; font-weight: 500; }
 .text-gray { color: #6b7280; }
+
+/* FLEX & UTILITIES BARU */
+.flex { display: flex; }
+.justify-between { justify-content: space-between; }
+.border-b { border-bottom: 1px solid #f3f4f6; }
+.py-2 { padding: 8px 0; }
+.text-sm { font-size: 0.875rem; }
 
 /* HEADER & SEARCH */
 .logo-title { font-size: 1.8rem; font-weight: 700; color: #111827; }
@@ -213,14 +242,31 @@ const runAudit = async () => {
 .meta-stats { display: flex; justify-content: space-between; font-size: 0.75rem; font-weight: 600; }
 .optimal-text { color: #9ca3af; font-size: 0.7rem; }
 
-/* GAUGE */
+/* GAUGE & STATS */
 .gauge-container { display: flex; justify-content: center; padding: 20px 0; }
-.gauge { width: 100px; height: 100px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 2rem; font-weight: 700; position: relative; }
-.gauge::before { content: ""; position: absolute; inset: 10px; background: white; border-radius: 50%; }
-.gauge-green { background: conic-gradient(#10b981 92%, #e5e7eb 0); }
-.gauge-black { background: conic-gradient(#111827 74%, #e5e7eb 0); }
-.gauge-green::after { content: "92"; position: absolute; z-index: 1; color: #111827; }
-.gauge-black::after { content: "74"; position: absolute; z-index: 1; color: #111827; }
+.gauge { 
+  width: 100px; 
+  height: 100px; 
+  border-radius: 50%; 
+  display: flex; 
+  align-items: center; 
+  justify-content: center; 
+  position: relative; 
+}
+.gauge::before { 
+  content: ""; 
+  position: absolute; 
+  inset: 10px; 
+  background: white; 
+  border-radius: 50%; 
+}
+.gauge-value {
+  position: absolute;
+  z-index: 1;
+  font-size: 2rem;
+  font-weight: 700;
+  color: #111827;
+}
 
 /* LISTS & BOXES */
 .schema-list { list-style: none; padding: 0; margin: 0; }
