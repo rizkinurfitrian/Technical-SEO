@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import axios from 'axios';
@@ -65,7 +66,7 @@ app.get('/api/audit', async (req, res) => {
 
     try {
 
-      const GOOGLE_API_KEY = 'AIzaSyAkXYIyKkfaaMdvgwubG-xpADMfiubNGXg';
+      const GOOGLE_API_KEY = process.env.GOOGLE_API_KEY;
 
       // Memanggil API Lighthouse dari Google (Strategi: Desktop)
       const psiUrl = `https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url=${encodeURIComponent(targetUrl)}&category=PERFORMANCE&category=ACCESSIBILITY&strategy=desktop&key=${GOOGLE_API_KEY}`;
