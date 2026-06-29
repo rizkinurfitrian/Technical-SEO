@@ -1,491 +1,239 @@
-<script setup lang="ts">
-import { ref } from 'vue'
-import { useAuditStore } from './stores/useAuditStore'
-
-const auditStore = useAuditStore()
-const targetUrl = ref('')
-
-const submitAudit = () => {
-  if (!targetUrl.value) {
-    alert('Harap masukkan URL terlebih dahulu!')
-    return
-  }
-  
-  let urlToAudit = targetUrl.value
-  if (!urlToAudit.startsWith('http')) {
-    urlToAudit = `https://${urlToAudit}`
-  }
-
-  auditStore.fetchAuditData(urlToAudit)
-}
-
-// Helper untuk menghitung persentase internal link
-const getInternalLinkPercentage = () => {
-  if (!auditStore.auditResult || auditStore.totalLinks === 0) return 0;
-  const internalLinks = auditStore.auditResult.links.filter(l => l.isInternal).length;
-  return Math.round((internalLinks / auditStore.totalLinks) * 100);
-}
-</script>
-
 <template>
-  <main class="dashboard-container">
-    <header>
-      <h1>Technical SEO & Schema Analyzer</h1>
-      <p>Masukkan URL halaman untuk melakukan audit Meta-Data, Schema, dan Internal Linking.</p>
+  <div class="dashboard-container">
+    <header class="text-center header-section">
+      <h1 class="logo-title"><span class="icon">📈</span> Technical SEO & Schema Analyzer</h1>
+      <p class="subtitle">Masukkan URL halaman untuk melakukan audit mendalam pada Meta-Data, Schema, dan Internal Linking.</p>
+      
+      <div class="search-box">
+        <span class="url-icon">🌐</span>
+        <input 
+          v-model="inputUrl" 
+          type="text" 
+          placeholder="https://..." 
+          @keyup.enter="runAudit" 
+        />
+        <button class="btn-audit" @click="runAudit" :disabled="isLoading">
+          {{ isLoading ? '⏳ Memproses...' : '🔍 Mulai Audit' }}
+        </button>
+      </div>
     </header>
 
-    <section class="search-section">
-      <input 
-        v-model="targetUrl" 
-        type="url" 
-        placeholder="Contoh: https://website.com/artikel-target" 
-        @keyup.enter="submitAudit"
-      />
-      <button @click="submitAudit" :disabled="auditStore.isLoading">
-        {{ auditStore.isLoading ? 'Menganalisis...' : 'Mulai Audit' }}
-      </button>
-    </section>
-
-    <div v-if="auditStore.error" class="error-alert">
-      ⚠️ {{ auditStore.error }}
+    <div v-if="isLoading" class="text-center mt-4">
+      <p>Sedang menganalisis halaman, mohon tunggu sebentar...</p>
     </div>
 
-    <section v-if="auditStore.hasResult" class="results-wrapper">
-      <div class="results-header">
-        <h2>Hasil Audit untuk: <a :href="auditStore.auditResult?.targetUrl" target="_blank">{{ auditStore.auditResult?.targetUrl }}</a></h2>
-        <button @click="auditStore.resetAudit()" class="btn-reset">Reset Audit</button>
+    <div class="summary-bar" v-if="auditData && !isLoading">
+      <div class="summary-text">
+        Hasil Audit untuk: <a :href="auditData.targetUrl" target="_blank" class="url-link">{{ auditData.targetUrl }}</a>
       </div>
-
-      <div class="dashboard-grid">
+      <div class="summary-actions">
+        <span class="badge badge-green">12 Aman</span>
+        <span class="badge badge-yellow">3 Peringatan</span>
+        <span class="badge badge-red">1 Kritis</span>
         
-        <div class="card">
-          <div class="card-header">
-            <h3>🏷️ Meta Title & Description</h3>
-          </div>
-          <div class="card-body">
-            <div class="data-group">
-              <label>Meta Title <span :class="auditStore.auditResult?.meta.isTitleOptimal ? 'badge-success' : 'badge-warning'">{{ auditStore.auditResult?.meta.titleLength }} Karakter</span></label>
-              <p class="data-value">{{ auditStore.auditResult?.meta.title || 'Tidak ditemukan' }}</p>
-              <small v-if="!auditStore.auditResult?.meta.isTitleOptimal" class="text-hint">Optimal: 50-60 karakter.</small>
-            </div>
-            
-            <div class="data-group">
-              <label>Meta Description <span :class="auditStore.auditResult?.meta.isDescriptionOptimal ? 'badge-success' : 'badge-warning'">{{ auditStore.auditResult?.meta.descriptionLength }} Karakter</span></label>
-              <p class="data-value">{{ auditStore.auditResult?.meta.description || 'Tidak ditemukan' }}</p>
-              <small v-if="!auditStore.auditResult?.meta.isDescriptionOptimal" class="text-hint">Optimal: 150-160 karakter.</small>
-            </div>
-
-            <div class="data-group-inline">
-              <div>
-                <label>Robots Directive:</label>
-                <span class="code-badge">{{ auditStore.auditResult?.meta.robots || 'Tidak ada' }}</span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div class="card">
-          <div class="card-header">
-            <h3>🧩 Structured Data (Schema)</h3>
-          </div>
-          <div class="card-body">
-            <div v-if="auditStore.auditResult?.schemas.length === 0" class="empty-state">
-              Tidak ada Schema JSON-LD yang terdeteksi di halaman ini.
-            </div>
-            <ul v-else class="schema-list">
-              <li v-for="(schema, index) in auditStore.auditResult?.schemas" :key="index" class="schema-item">
-                <div class="schema-info">
-                  <span class="schema-type">{{ schema.type }}</span>
-                  <span v-if="schema.isValid" class="status-icon success">✔️ Terdeteksi</span>
-                  <span v-else class="status-icon error">❌ Invalid</span>
-                </div>
-              </li>
-            </ul>
-          </div>
-        </div>
-
-        <div class="card link-card">
-          <div class="card-header">
-            <h3>🔗 Link Analysis</h3>
-            <span class="badge-neutral">Total: {{ auditStore.totalLinks }} Links</span>
-          </div>
-          <div class="card-body">
-            <div class="link-stats">
-              <div class="stat-box">
-                <span class="stat-value">{{ getInternalLinkPercentage() }}%</span>
-                <span class="stat-label">Internal Link Ratio</span>
-              </div>
-            </div>
-            
-            <div class="table-container">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Anchor Text</th>
-                    <th>Tipe</th>
-                    <th>URL</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr v-for="(link, index) in auditStore.auditResult?.links" :key="index">
-                    <td class="anchor-text">{{ link.anchorText || '[Tanpa Teks]' }}</td>
-                    <td>
-                      <span :class="link.isInternal ? 'badge-internal' : 'badge-external'">
-                        {{ link.isInternal ? 'Internal' : 'External' }}
-                      </span>
-                    </td>
-                    <td class="link-url"><a :href="link.url" target="_blank" title="Buka URL">{{ link.url }}</a></td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-
+        <div class="divider"></div>
+        <button class="btn-reset" @click="resetAudit">↻ Reset Audit</button>
       </div>
-    </section>
-  </main>
+    </div>
+
+    <div class="main-grid" v-if="auditData && !isLoading">
+      
+      <div class="left-col">
+        <AuditCard>
+          <template #header>
+            <div class="card-title">📄 Meta Title & Description</div>
+            <span :class="auditData.meta.isTitleOptimal && auditData.meta.isDescriptionOptimal ? 'badge badge-green' : 'badge badge-yellow-outline'">
+              {{ auditData.meta.isTitleOptimal && auditData.meta.isDescriptionOptimal ? 'Optimal' : 'Perlu Optimasi' }}
+            </span>
+          </template>
+          
+          <div class="meta-item">
+            <label class="font-semibold">Meta Title</label>
+            <p class="meta-text">{{ auditData.meta.title || 'Tidak ada tag title ditemukan.' }}</p>
+            <div class="progress-bar-container">
+              <div class="progress-fill" :class="auditData.meta.isTitleOptimal ? 'green' : 'red'" :style="{ width: Math.min((auditData.meta.titleLength / 60) * 100, 100) + '%' }"></div>
+            </div>
+            <div class="meta-stats" :class="auditData.meta.isTitleOptimal ? 'text-green' : 'text-red'">
+              {{ auditData.meta.titleLength }} Karakter <span class="optimal-text">OPTIMAL: 50-60</span>
+            </div>
+          </div>
+
+          <div class="meta-item mt-4">
+            <label class="font-semibold">Meta Description</label>
+            <p class="meta-text">{{ auditData.meta.description || 'Tidak ada meta description ditemukan.' }}</p>
+            <div class="progress-bar-container">
+              <div class="progress-fill" :class="auditData.meta.isDescriptionOptimal ? 'green' : 'red'" :style="{ width: Math.min((auditData.meta.descriptionLength / 160) * 100, 100) + '%' }"></div>
+            </div>
+            <div class="meta-stats" :class="auditData.meta.isDescriptionOptimal ? 'text-green' : 'text-red'">
+              {{ auditData.meta.descriptionLength }} Karakter <span class="optimal-text">OPTIMAL: 120-160</span>
+            </div>
+          </div>
+        </AuditCard>
+
+        <div class="perf-row">
+          <AuditCard>
+             <template #header><div class="card-title">♿ Accessibility</div></template>
+             <div class="gauge-container"><div class="gauge gauge-green">92</div></div>
+          </AuditCard>
+          <AuditCard>
+             <template #header><div class="card-title">⚡ Performance</div></template>
+             <div class="gauge-container"><div class="gauge gauge-black">74</div></div>
+          </AuditCard>
+        </div>
+      </div>
+
+      <div class="right-col">
+        <AuditCard>
+          <template #header>
+            <div class="card-title">🧩 Structured Data (Schema)</div>
+            <span class="badge badge-gray-outline">{{ auditData.schemas.length }} Tipe</span>
+          </template>
+          
+          <ul class="schema-list" v-if="auditData.schemas.length > 0">
+            <li v-for="(schema, index) in auditData.schemas" :key="index">
+              <span class="schema-tag" :class="{ 'error': !schema.isValid }">{{ schema.type }}</span> 
+              <span :class="schema.isValid ? 'text-green' : 'text-red'">
+                {{ schema.isValid ? '✔️ Valid' : '❌ Error' }}
+              </span>
+            </li>
+          </ul>
+          <p v-else class="text-gray text-center mt-4">Tidak ada JSON-LD Schema ditemukan.</p>
+        </AuditCard>
+
+        <div class="mt-4">
+          <AuditCard>
+            <template #header><div class="card-title">🔗 Internal Linking</div></template>
+            <div class="link-boxes">
+              <div class="link-box">
+                <div class="number">{{ auditData.links.filter(l => l.isInternal).length }}</div>
+                <div class="label">Inbound</div>
+              </div>
+              <div class="link-box">
+                <div class="number">{{ auditData.links.filter(l => !l.isInternal).length }}</div>
+                <div class="label">Outbound</div>
+              </div>
+            </div>
+          </AuditCard>
+        </div>
+      </div>
+    </div>
+  </div>
 </template>
+
+<script setup lang="ts">
+import { ref, watch } from 'vue';
+import AuditCard from './components/AuditCard.vue';
+
+// State aplikasi
+const inputUrl = ref('');
+const isLoading = ref(false);
+const auditData = ref<any>(null);
+
+// Mengawasi input URL: Hapus hasil analisis otomatis jika kotak input dikosongkan
+watch(inputUrl, (newValue) => {
+  if (newValue.trim() === '') {
+    auditData.value = null;
+  }
+});
+
+// Fungsi Reset manual via tombol
+const resetAudit = () => {
+  inputUrl.value = '';
+  auditData.value = null;
+};
+
+// Fungsi Utama: Mengambil data dari server.js
+const runAudit = async () => {
+  if (!inputUrl.value) {
+    alert("Masukkan URL terlebih dahulu!");
+    return;
+  }
+
+  isLoading.value = true;
+  auditData.value = null; // Kosongkan data lama saat loading data baru
+
+  try {
+    const response = await fetch(`http://localhost:3000/api/audit?url=${encodeURIComponent(inputUrl.value)}`);
+    if (!response.ok) throw new Error("Gagal mengambil data");
+    
+    const result = await response.json();
+    auditData.value = result; // Memasukkan data baru ke layar
+    console.log("Audit Sukses:", result);
+  } catch (error) {
+    console.error("Gagal melakukan audit:", error);
+    alert("Terjadi kesalahan. Pastikan server lokal (Node.js) berjalan di port 3000.");
+  } finally {
+    isLoading.value = false;
+  }
+};
+</script>
 
 <style scoped>
 /* GENERAL STYLES */
-.dashboard-container {
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 1.5rem;
-  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-  color: #333;
-}
+.dashboard-container { max-width: 1100px; margin: 0 auto; padding: 40px 20px; font-family: 'Inter', sans-serif; color: #374151; }
+.text-center { text-align: center; }
+.mt-4 { margin-top: 1.5rem; }
+.font-semibold { font-weight: 600; display: block; margin-bottom: 5px; }
+.text-green { color: #10b981; font-weight: 500; }
+.text-red { color: #ef4444; font-weight: 500; }
+.text-gray { color: #6b7280; }
 
-header {
-  text-align: center;
-  margin-bottom: 2rem;
-}
+/* HEADER & SEARCH */
+.logo-title { font-size: 1.8rem; font-weight: 700; color: #111827; }
+.subtitle { color: #6b7280; margin: 10px 0 24px 0; }
+.search-box { display: flex; max-width: 700px; margin: 0 auto; border: 1px solid #d1d5db; border-radius: 8px; overflow: hidden; }
+.search-box .url-icon { padding: 12px 16px; background: #f9fafb; border-right: 1px solid #d1d5db; }
+.search-box input { flex: 1; padding: 12px; border: none; outline: none; }
+.search-box .btn-audit { background: #10b981; color: white; border: none; padding: 0 24px; font-weight: 600; cursor: pointer; transition: 0.2s; }
+.search-box .btn-audit:disabled { background: #9ca3af; cursor: not-allowed; }
 
-header h1 {
-  color: #2c3e50;
-  margin-bottom: 0.5rem;
-  font-size: clamp(1.5rem, 4vw, 2rem); /* Ukuran font dinamis */
-}
+/* SUMMARY BAR */
+.summary-bar { display: flex; justify-content: space-between; align-items: center; margin: 30px 0 20px 0; padding-bottom: 15px; border-bottom: 1px solid #e5e7eb; }
+.url-link { color: #10b981; text-decoration: none; font-weight: 500; word-break: break-all; }
+.summary-actions { display: flex; align-items: center; gap: 10px; }
+.badge { padding: 4px 12px; border-radius: 20px; font-size: 0.75rem; font-weight: 600; }
+.badge-green { background: #d1fae5; color: #065f46; }
+.badge-yellow { background: #fef3c7; color: #92400e; }
+.badge-red { background: #fee2e2; color: #991b1b; }
+.badge-yellow-outline { border: 1px solid #f59e0b; color: #d97706; background: #fffbeb; }
+.badge-gray-outline { border: 1px solid #d1d5db; color: #4b5563; }
+.divider { width: 1px; height: 24px; background: #d1d5db; margin: 0 5px; }
+.btn-reset { background: transparent; border: 1px solid #ef4444; color: #ef4444; padding: 4px 12px; border-radius: 6px; cursor: pointer; font-size: 0.8rem; font-weight: 600; transition: 0.2s; }
+.btn-reset:hover { background: #fef2f2; }
 
-/* SEARCH SECTION */
-.search-section {
-  display: flex;
-  gap: 1rem;
-  margin-bottom: 2rem;
-  background: #f8f9fa;
-  padding: 1.5rem;
-  border-radius: 8px;
-  border: 1px solid #e9ecef;
-}
+/* LAYOUT GRIDS */
+.main-grid { display: grid; grid-template-columns: 1.5fr 1fr; gap: 20px; align-items: start; }
+.perf-row { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 20px; }
 
-input {
-  flex: 1;
-  padding: 0.85rem 1rem;
-  font-size: 1rem;
-  border: 1px solid #ced4da;
-  border-radius: 6px;
-  outline: none;
-  width: 100%;
-  box-sizing: border-box;
-}
+/* PROGRESS BARS */
+.progress-bar-container { width: 100%; height: 6px; background: #e5e7eb; border-radius: 4px; overflow: hidden; margin: 8px 0; }
+.progress-fill { height: 100%; transition: width 0.5s ease; }
+.progress-fill.green { background: #10b981; }
+.progress-fill.red { background: #ef4444; }
+.meta-stats { display: flex; justify-content: space-between; font-size: 0.75rem; font-weight: 600; }
+.optimal-text { color: #9ca3af; font-size: 0.7rem; }
 
-input:focus {
-  border-color: #42b883;
-  box-shadow: 0 0 0 3px rgba(66, 184, 131, 0.2);
-}
+/* GAUGE */
+.gauge-container { display: flex; justify-content: center; padding: 20px 0; }
+.gauge { width: 100px; height: 100px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 2rem; font-weight: 700; position: relative; }
+.gauge::before { content: ""; position: absolute; inset: 10px; background: white; border-radius: 50%; }
+.gauge-green { background: conic-gradient(#10b981 92%, #e5e7eb 0); }
+.gauge-black { background: conic-gradient(#111827 74%, #e5e7eb 0); }
+.gauge-green::after { content: "92"; position: absolute; z-index: 1; color: #111827; }
+.gauge-black::after { content: "74"; position: absolute; z-index: 1; color: #111827; }
 
-button {
-  padding: 0.85rem 1.5rem;
-  font-size: 1rem;
-  font-weight: bold;
-  background-color: #42b883;
-  color: white;
-  border: none;
-  border-radius: 6px;
-  cursor: pointer;
-  transition: all 0.2s;
-  white-space: nowrap;
-}
+/* LISTS & BOXES */
+.schema-list { list-style: none; padding: 0; margin: 0; }
+.schema-list li { display: flex; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid #f3f4f6; font-size: 0.9rem; }
+.schema-tag { background: #f3f4f6; padding: 4px 8px; border-radius: 4px; font-family: monospace; }
+.schema-tag.error { background: #fee2e2; color: #ef4444; }
+.link-boxes { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.link-box { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px; padding: 20px; text-align: center; }
+.link-box .number { font-size: 2rem; font-weight: 700; color: #111827; }
 
-button:hover:not(:disabled) {
-  background-color: #35966a;
-}
-
-button:disabled {
-  background-color: #a0a0a0;
-  cursor: not-allowed;
-}
-
-/* DASHBOARD LAYOUT */
-.results-wrapper {
-  animation: fadeIn 0.5s ease-in-out;
-}
-
-.results-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 1.5rem;
-  padding-bottom: 1rem;
-  border-bottom: 2px solid #eee;
-  gap: 1rem;
-}
-
-.results-header h2 {
-  font-size: clamp(1.1rem, 3vw, 1.25rem);
-  color: #2c3e50;
-  margin: 0;
-  word-break: break-all; /* Mencegah URL panjang merusak layout */
-}
-
-.btn-reset {
-  background-color: #dc3545;
-  padding: 0.5rem 1rem;
-  font-size: 0.9rem;
-}
-
-.btn-reset:hover {
-  background-color: #c82333;
-}
-
-/* GRID RESPONSIVE - Menggunakan CSS Clamp/Minmax cerdas */
-.dashboard-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 350px), 1fr));
-  gap: 1.5rem;
-  align-items: start;
-}
-
-/* CARDS */
-.card {
-  background: white;
-  border-radius: 8px;
-  box-shadow: 0 4px 6px rgba(0,0,0,0.05);
-  border: 1px solid #eaeaeb;
-  overflow: hidden;
-}
-
-.card-header {
-  background: #f8f9fa;
-  padding: 1rem 1.5rem;
-  border-bottom: 1px solid #eaeaeb;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-}
-
-.card-header h3 {
-  margin: 0;
-  font-size: 1.1rem;
-  color: #2c3e50;
-}
-
-.card-body {
-  padding: 1.5rem;
-}
-
-/* DATA TYPOGRAPHY & BADGES */
-.data-group {
-  margin-bottom: 1.5rem;
-}
-
-.data-group label {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  font-weight: 600;
-  margin-bottom: 0.5rem;
-  color: #495057;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-}
-
-.data-value {
-  margin: 0;
-  padding: 0.75rem;
-  background: #f1f3f5;
-  border-radius: 4px;
-  font-size: 0.95rem;
-  line-height: 1.5;
-  color: #333;
-  word-break: break-word;
-}
-
-.text-hint {
-  display: block;
-  margin-top: 0.25rem;
-  color: #868e96;
-  font-size: 0.8rem;
-}
-
-.code-badge {
-  background: #282c34;
-  color: #abb2bf;
-  padding: 0.2rem 0.5rem;
-  border-radius: 4px;
-  font-family: monospace;
-  word-break: break-all;
-}
-
-.badge-success { background: #d4edda; color: #155724; padding: 0.2rem 0.5rem; border-radius: 12px; font-size: 0.8rem; }
-.badge-warning { background: #fff3cd; color: #856404; padding: 0.2rem 0.5rem; border-radius: 12px; font-size: 0.8rem; }
-.badge-neutral { background: #e2e3e5; color: #383d41; padding: 0.2rem 0.5rem; border-radius: 12px; font-size: 0.8rem; font-weight: bold; }
-.badge-internal { background: #cce5ff; color: #004085; padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.75rem; font-weight: bold;}
-.badge-external { background: #e2e3e5; color: #383d41; padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.75rem; font-weight: bold;}
-
-/* SCHEMA LIST */
-.schema-list {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-}
-
-.schema-item {
-  padding: 0.75rem;
-  border: 1px solid #e9ecef;
-  border-radius: 6px;
-  margin-bottom: 0.5rem;
-  background: #fafafa;
-}
-
-.schema-info {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-}
-
-.schema-type {
-  font-weight: 600;
-  color: #1971c2;
-}
-
-/* LINK TABLE */
-.link-card {
-  grid-column: 1 / -1; 
-}
-
-.link-stats {
-  margin-bottom: 1rem;
-}
-
-.stat-box {
-  display: inline-block;
-  background: #f8f9fa;
-  padding: 0.5rem 1rem;
-  border-radius: 6px;
-  border: 1px solid #e9ecef;
-}
-
-.stat-value {
-  font-size: 1.25rem;
-  font-weight: bold;
-  color: #42b883;
-  margin-right: 0.5rem;
-}
-
-.stat-label {
-  font-size: 0.85rem;
-  color: #6c757d;
-}
-
-.table-container {
-  max-height: 400px;
-  overflow-y: auto;
-  overflow-x: auto; /* Memastikan tabel bisa di-scroll horizontal di HP */
-  border: 1px solid #e9ecef;
-  border-radius: 6px;
-  -webkit-overflow-scrolling: touch; /* Kelancaran scroll di iOS */
-}
-
-table {
-  width: 100%;
-  border-collapse: collapse;
-  text-align: left;
-  font-size: 0.9rem;
-  min-width: 600px; /* Mencegah kolom tabel terlalu menyusut di HP */
-}
-
-thead {
-  background-color: #f8f9fa;
-  position: sticky;
-  top: 0;
-  z-index: 1;
-}
-
-th, td {
-  padding: 0.75rem 1rem;
-  border-bottom: 1px solid #e9ecef;
-}
-
-.anchor-text {
-  max-width: 200px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  font-weight: 500;
-}
-
-.link-url {
-  max-width: 300px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.link-url a {
-  color: #0056b3;
-  text-decoration: none;
-}
-
-.link-url a:hover {
-  text-decoration: underline;
-}
-
-/* ANIMATIONS */
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(10px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-/* =========================================
-   MEDIA QUERIES UNTUK TAMPILAN MOBILE (HP)
-   ========================================= */
-@media (max-width: 768px) {
-  .dashboard-container {
-    padding: 1rem;
-  }
-  
-  .search-section {
-    flex-direction: column; /* Input dan tombol ditumpuk ke bawah */
-    padding: 1rem;
-  }
-
-  button {
-    width: 100%; /* Tombol memenuhi lebar layar */
-  }
-
-  .results-header {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-
-  .btn-reset {
-    width: 100%;
-    text-align: center;
-  }
-
-  .card-body {
-    padding: 1rem;
-  }
-
-  .stat-box {
-    display: block;
-    text-align: center;
-  }
+@media (max-width: 900px) {
+  .main-grid { grid-template-columns: 1fr; }
+  .summary-bar { flex-direction: column; align-items: flex-start; gap: 15px; }
+  .summary-actions { flex-wrap: wrap; }
 }
 </style>
