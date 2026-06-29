@@ -105,11 +105,11 @@
             <template #header><div class="card-title">🔗 Internal Linking</div></template>
             <div class="link-boxes">
               <div class="link-box">
-                <div class="number">{{ auditData.links.filter(l => l.isInternal).length }}</div>
+                <div class="number">{{ auditData.links.filter((l: any) => l.isInternal).length }}</div>
                 <div class="label">Inbound</div>
               </div>
               <div class="link-box">
-                <div class="number">{{ auditData.links.filter(l => !l.isInternal).length }}</div>
+                <div class="number">{{ auditData.links.filter((l: any) => !l.isInternal).length }}</div>
                 <div class="label">Outbound</div>
               </div>
             </div>
